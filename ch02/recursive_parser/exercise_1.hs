@@ -44,6 +44,9 @@ parseExpr = parseAtom
           <|> try parseNumber
           <|> parseBool
           <|> parseQuoted
+          <|> parseQuasiquote
+          <|> try parseUnquoteSplicing
+          <|> parseUnquote
           <|> do char '('
                  x <- try parseList <|> parseDottedList
                  char ')'
@@ -143,6 +146,23 @@ parseBool = do char '#'
                return $ case c of
                       't' -> Bool True
                       'f' -> Bool False
+
+parseQuasiquote :: Parser LispVal
+parseQuasiquote = do char '`'
+                     expr <- parseExpr
+                     return $ List [Atom "quasiquote", expr]
+
+-- Bug: this allows the unquote to appear outside of a quasiquoted list
+parseUnquote :: Parser LispVal
+parseUnquote = do char ','
+                  expr <- parseExpr
+                  return $ List [Atom "unquote", expr]
+
+-- Bug: this allows unquote-splicing to appear outside of a quasiquoted list
+parseUnquoteSplicing :: Parser LispVal
+parseUnquoteSplicing = do string ",@"
+                          expr <- parseExpr
+                          return $ List [Atom "unquote-splicing", expr]
 
 --
 -- Helpers

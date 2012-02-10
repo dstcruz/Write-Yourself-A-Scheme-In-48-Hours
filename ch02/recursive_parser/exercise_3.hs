@@ -2,6 +2,7 @@ module Main where
 
 import Char (toLower)
 import Control.Monad (liftM)
+import Data.Array (Array (..), listArray)
 import Data.Ratio (Rational (..), (%))
 import Data.Complex (Complex (..))
 import Numeric (readOct, readHex)
@@ -18,6 +19,7 @@ data LispVal = Atom String
              | String String
              | Char Char
              | Bool Bool
+             | Vector (Array Int LispVal)
                deriving (Show)
 
 main :: IO ()
@@ -44,10 +46,10 @@ parseExpr = parseAtom
           <|> try parseNumber
           <|> parseBool
           <|> parseQuoted
-          <|> do char '('
-                 x <- try parseList <|> parseDottedList
-                 char ')'
-                 return x
+          <|> parseQuasiquote
+          <|> try parseUnquoteSplicing
+          <|> parseUnquote
+          <|> parseList
 
 parseAtom :: Parser LispVal
 parseAtom = do first <- letter <|> symbol
@@ -55,12 +57,24 @@ parseAtom = do first <- letter <|> symbol
                (return . Atom) (first:rest)
 
 parseList :: Parser LispVal
-parseList = fmap List $ sepBy parseExpr spaces
+parseList = char '(' >> parseList1
 
-parseDottedList :: Parser LispVal
-parseDottedList = do head <- endBy parseExpr spaces
-                     tail <- char '.' >> spaces >> parseExpr
-                     return $ DottedList head tail
+parseList1 :: Parser LispVal
+parseList1 = (char ')' >> (return . List) []) 
+               <|> do expr <- parseExpr
+                      parseList2 [expr]
+
+parseList2 :: [LispVal] -> Parser LispVal
+parseList2 expr = (char ')' >> (return . List) (reverse expr)) 
+                    <|> (spaces >> parseList3 expr)
+
+parseList3 :: [LispVal] -> Parser LispVal
+parseList3 expr = do char '.' >> spaces
+                     dotted <- parseExpr
+                     char ')'
+                     return $ DottedList expr dotted
+                  <|> do next <- parseExpr
+                         parseList2 (next:expr)
 
 parseQuoted :: Parser LispVal
 parseQuoted = do char '\''
@@ -143,6 +157,29 @@ parseBool = do char '#'
                return $ case c of
                       't' -> Bool True
                       'f' -> Bool False
+
+parseQuasiquote :: Parser LispVal
+parseQuasiquote = do char '`'
+                     expr <- parseExpr
+                     return $ List [Atom "quasiquote", expr]
+
+-- Bug: this allows the unquote to appear outside of a quasiquoted list
+parseUnquote :: Parser LispVal
+parseUnquote = do char ','
+                  expr <- parseExpr
+                  return $ List [Atom "unquote", expr]
+
+-- Bug: this allows unquote-splicing to appear outside of a quasiquoted list
+parseUnquoteSplicing :: Parser LispVal
+parseUnquoteSplicing = do string ",@"
+                          expr <- parseExpr
+                          return $ List [Atom "unquote-splicing", expr]
+
+parseVector :: Parser LispVal
+parseVector = do string "#("
+                 elems <- sepBy parseExpr spaces
+                 char ')'
+                 return $ Vector (listArray (0, (length elems)-1) elems)
 
 --
 -- Helpers
