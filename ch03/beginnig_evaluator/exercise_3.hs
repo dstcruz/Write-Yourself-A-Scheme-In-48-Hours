@@ -31,6 +31,14 @@ readExpr input = case parse parseExpr "lisp" input of
          Left err -> String $ "No match: " ++ show err
          Right val -> val
 
+-- not sure I understand the type of this function
+-- according to ghci
+repl :: IO b
+repl = getLine >>= repl' >> repl
+
+repl' :: String -> IO ()
+repl' = print . eval . readExpr
+
 --
 -- LispVal Parsers
 --
@@ -208,14 +216,65 @@ eval (List (Atom func : args)) = apply func $ map eval args
 -- Primitive functions lookup table
 --
 primitives :: [(String, [LispVal] -> LispVal)]
-primitives = [("+", numericBinop (+)),
-              ("-", numericBinop (-)),
-              ("*", numericBinop (*)),
-              ("/", numericBinop div),
-              ("mod", numericBinop mod),
-              ("quotient", numericBinop quot),
-              ("remainder", numericBinop rem)]
+primitives = [("+", numericBinop (+))
+             ,("-", numericBinop (-))
+             ,("*", numericBinop (*))
+             ,("/", numericBinop div)
+             ,("mod", numericBinop mod)
+             ,("quotient", numericBinop quot)
+             ,("remainder", numericBinop rem)
+             ,("not", unaryOp not')
+             ,("boolean?", unaryOp boolP)
+             ,("list?", unaryOp listP)
+             ,("symbol?", unaryOp symbolP)
+             ,("char?", unaryOp charP)
+             ,("string?", unaryOp stringP)
+             ,("vector?", unaryOp vectorP)
+             ,("symbol->string", unaryOp symbol2string)
+             ,("string->symbol", unaryOp string2symbol)]
 
+--
+-- Unary primitive defs all have type
+-- LispVal -> LispVal
+
+not' (Bool x) = (Bool . not) x
+not' _ = Bool False
+
+boolP (Bool _) = Bool True
+boolP _ = Bool False
+
+listP (List _) = Bool True
+listP (DottedList _ _) = Bool True
+listP _ = Bool False
+
+symbolP (Atom _) = Bool True
+symbolP _ = Bool False
+
+charP (Char _) = Bool True
+charP _ = Bool False
+
+stringP (String _) = Bool True
+stringP _ = Bool False
+
+vectorP (Vector _) = Bool True
+vectorP _ = Bool False
+
+symbol2string (Atom s) = String s
+symbol2string _ = error "Expecting an Atom"
+
+string2symbol (String s) = Atom s
+string2symbol _ = error "Expecting a String"
+
+
+--
+-- Primitive helpers
+--
+
+numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
+numericBinop op params = Number $ foldl1 op $ map unpackNum params
+
+unaryOp :: (LispVal -> LispVal) -> [LispVal] -> LispVal
+unaryOp func [arg] = func arg
 
 --
 -- Helpers
@@ -251,14 +310,7 @@ unwordsList = unwords . map showVal
 apply :: String -> [LispVal] -> LispVal
 apply func args = maybe (Bool False) ($ args) $ lookup func primitives
 
-numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
-numericBinop op params = Number $ foldl1 op $ map unpackNum params
-
 unpackNum :: LispVal -> Integer
 unpackNum (Number n) = n
-unpackNum (String n) = let parsed = reads n in
-                         if null parsed
-                            then 0
-                            else fst $ parsed !! 0
 unpackNum (List [n]) = unpackNum n
 unpackNum _ = 0
