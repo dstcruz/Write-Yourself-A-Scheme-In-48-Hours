@@ -1,7 +1,7 @@
 Write Yourself A Scheme In 48 Hours
 ===================================
 
-These are my solution to the Haskell [wiki tutorial](http://en.wikibooks.org/wiki/Write_Yourself_a_Scheme_in_48_Hours).
+These are my solution to [this](http://en.wikibooks.org/wiki/Write_Yourself_a_Scheme_in_48_Hours) Haskell tutorial.
 
 You can try it out easily by:
 
